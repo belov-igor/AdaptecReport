@@ -10,6 +10,7 @@ from scripts.send_email import ReportSender
 class AdaptecReport:
 
     def __init__(self, username, hostname):
+        self.arconf_path = str()
         self.df = None
         self.table = None
         self.username = username
@@ -18,6 +19,25 @@ class AdaptecReport:
         self.device_name = str()
         self.device_status = str()
         self.data = str()
+
+    def adaptec_counter(self, arconf_path):
+        """
+        Функция подсчета количества используемых adaptec
+        :arconf_path: путь до утилиты arcconf
+        :return: количество используемых adaptec
+        """
+        self.arconf_path = arconf_path
+        count = 0
+
+        # Подключение к хостам по ssh, получение данных arcconf getversion
+        connect = subprocess.run(
+            ["ssh", f"{self.username}@{self.hostname}", f"{self.arconf_path}", "getversion"],
+            stdout=subprocess.PIPE)
+        data = connect.stdout.decode().split('\n')
+        for string in data:
+            if 'controllers found' in string.lower():
+                count = int(string.split(':')[-1])
+        return count
 
     def logical_device_status(self):
         """
@@ -31,17 +51,21 @@ class AdaptecReport:
         if 'esxi' in self.hostname:
             arcconf_path = f'/vmfs/volumes/{self.hostname}_ssdvol/arcconf'
 
+        # Подсчет количества используемых adaptec'ов
+        adaptec_count = self.adaptec_counter(arconf_path=arcconf_path)
+
         # Подключение к хостам по ssh, получение данных arcconf, парсинг
-        connect = subprocess.run(
-            ["ssh", f"{self.username}@{self.hostname}", f"{arcconf_path}", "GETCONFIG", "1", "ld"],
-            stdout=subprocess.PIPE)
-        self.data = connect.stdout.decode().split('\n')
-        for string in self.data:
-            if 'device name' in string.lower():
-                self.device_name = string.split()[-1]
-            if 'status of logical device' in string.lower():
-                self.device_status = string.split()[-1]
-            self.config.update({self.device_name: self.device_status})
+        for adaptec in range(1, adaptec_count + 1):
+            connect = subprocess.run(
+                ["ssh", f"{self.username}@{self.hostname}", f"{arcconf_path}", "GETCONFIG", f"{adaptec}", "ld"],
+                stdout=subprocess.PIPE)
+            self.data = connect.stdout.decode().split('\n')
+            for string in self.data:
+                if 'device name' in string.lower():
+                    self.device_name = string.split()[-1]
+                if 'status of logical device' in string.lower():
+                    self.device_status = string.split()[-1]
+                self.config.update({self.device_name: self.device_status})
 
     def run(self):
         self.logical_device_status()
