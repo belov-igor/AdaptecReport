@@ -1,4 +1,5 @@
 # created by virtualenv automatically
 .idea
 venv
-config/
+config/email_server.py
+config/hosts.py
